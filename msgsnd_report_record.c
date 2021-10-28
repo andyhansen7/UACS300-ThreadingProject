@@ -50,7 +50,10 @@ int main(int argc, char**argv)
 
 
     key = ftok(FILE_IN_HOME_DIR,1);
-    //printf("open queue\n");
+    if (key == 0xffffffff) {
+	fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+	return 1;
+    }
     if ((msqid = msgget(key, msgflg)) < 0) {
         int errnum = errno;
         fprintf(stderr, "Value of errno: %d\n", errno);

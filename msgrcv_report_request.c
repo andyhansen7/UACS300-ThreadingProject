@@ -17,6 +17,11 @@ int main(int argc, char**argv)
     size_t buf_length;
 
     key = ftok(FILE_IN_HOME_DIR,QUEUE_NUMBER);
+    if (key == 0xffffffff) {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        return 1;
+    }
+
     if ((msqid = msgget(key, msgflg)) < 0) {
         int errnum = errno;
         fprintf(stderr, "Value of errno: %d\n", errno);

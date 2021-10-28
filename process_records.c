@@ -19,6 +19,11 @@ int main(int argc, char**argv)
 
 
     key = ftok(FILE_IN_HOME_DIR,QUEUE_NUMBER);
+    if (key == 0xffffffff) {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        return 1;
+    }
+
 
     if ((msqid = msgget(key, msgflg)) < 0) {
         int errnum = errno;
@@ -46,6 +51,11 @@ int main(int argc, char**argv)
     fprintf(stderr,"process-msgrcv-request: msg type-%ld, Record %d of %d: %s ret/bytes rcv'd=%d\n", rbuf.mtype, rbuf.report_idx,rbuf.report_count,rbuf.search_string, ret);
 
     key = ftok(FILE_IN_HOME_DIR,1);
+    if (key == 0xffffffff) {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        return 1;
+    }
+
 
     if ((msqid = msgget(key, msgflg)) < 0) {
         int errnum = errno;

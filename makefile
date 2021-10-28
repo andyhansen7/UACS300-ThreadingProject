@@ -64,5 +64,5 @@ msgrcv: msgrcv_report_request.c report_record_formats.h queue_ids.h
 
 clean :
 	rm *.o $(SHARED_LIB) edu_cs300_MessageJNI.h $(JAVA_PKG)/*.class process_records msgsnd msgrcv
-	ipcs -q|grep monicaherzog|while read line; do id=`echo $line|cut -d' ' -f3`; echo $id; ipcrm -Q $id;done
+	ipcs -q|grep ${USER}|while read line; do id=`echo $$line|cut -d' ' -f3`; echo $$id; ipcrm -Q $$id;done
 

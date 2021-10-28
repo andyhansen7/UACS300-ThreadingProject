@@ -59,6 +59,12 @@ JNIEXPORT void JNICALL Java_edu_cs300_MessageJNI_writeReportRequest
     report_request_buf rbuf;
 
     key = ftok(FILE_IN_HOME_DIR ,QUEUE_NUMBER);
+    if (key == 0xffffffff) {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        fprintf(stderr,"Ctl-C and fix the problem\n");
+        return;
+    }
+
     if ((msqid = msgget(key, msgflg)) < 0) {
         int errnum = errno;
         fprintf(stderr, "Value of errno: %d\n", errno);
@@ -116,7 +122,10 @@ JNIEXPORT jstring JNICALL Java_edu_cs300_MessageJNI_readReportRecord
     // ftok to generate unique key
     //key = ftok(CRIMSON_ID, QUEUE_NUMBER);
     key = ftok(FILE_IN_HOME_DIR, qid);
-
+    if (key == 0xffffffff) {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        fprintf(stderr,"returned record is not valid\n");
+    }
     // msgget creates a message queue
     // and returns identifier
     msqid = msgget(key, 0666 | IPC_CREAT);
