@@ -33,7 +33,7 @@ public class ReportingSystem
 
 				   DebugLog.log("loadReportJobs: Starting thread #" + i.toString() + " with filepath " + fileName);
 
-				   ReportGeneratorThread newThread = new ReportGeneratorThread(i, fileName);
+				   ReportGeneratorThread newThread = new ReportGeneratorThread(i, 0, fileName);
 				   fileReaders.add(newThread);
 
 				   /// Start thread

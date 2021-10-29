@@ -9,11 +9,13 @@ public class ReportGeneratorThread extends Thread
     /// Class member variables
     String _filepath;
     Integer _id;
+    Integer _numReports;
 
     /// Constructor
-    public ReportGeneratorThread(Integer id, String filepath)
+    public ReportGeneratorThread(Integer id, Integer numReports, String filepath)
     {
         this._id = id;
+        this._numReports = numReports;
         this._filepath = filepath;
     }
 
@@ -70,7 +72,7 @@ public class ReportGeneratorThread extends Thread
         }
 
         /// Send request on System V queue
-        MessageJNI.writeReportRequest(_id, 2, reportSearchString);  /// TODO
+        MessageJNI.writeReportRequest(_id, 1, reportSearchString);
 
         /// Wait for string return from c application
         Debug("sending query request to C application...");
@@ -110,7 +112,6 @@ public class ReportGeneratorThread extends Thread
 
         /// Close scanner
         reportScanner.close();
-
     }
 
     private void Debug(String message)
