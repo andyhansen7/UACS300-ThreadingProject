@@ -72,10 +72,10 @@ public class ReportGeneratorThread extends Thread
         }
 
         /// Send request on System V queue
+        Debug("sending query request to C application...");
         MessageJNI.writeReportRequest(_id, 1, reportSearchString);
 
         /// Wait for string return from c application
-        Debug("sending query request to C application...");
         String queryResponse = MessageJNI.readReportRecord(_id);
         Debug("received response from C application, processing record...");
 
@@ -87,7 +87,7 @@ public class ReportGeneratorThread extends Thread
 
             /// Write headers and title
             outputWriter.write(reportTitle + "\n");
-            for (ColumnAttributes attr : columnAttributes)
+            for(ColumnAttributes attr : columnAttributes)
             {
                 outputWriter.write(attr.name + "\t");
             }
