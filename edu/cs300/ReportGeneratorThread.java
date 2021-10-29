@@ -74,7 +74,7 @@ public class ReportGeneratorThread extends Thread
 
         /// Wait for string return from c application
         Debug("sending query request to C application...");
-        //String queryResponse = MessageJNI.readReportRecord(_id);
+        String queryResponse = MessageJNI.readReportRecord(_id);
         Debug("received response from C application, processing record...");
 
         /// Create output file
@@ -85,17 +85,26 @@ public class ReportGeneratorThread extends Thread
 
             /// Write headers and title
             outputWriter.write(reportTitle + "\n");
-            for(int i = 0; i < columnAttributes.size(); i++)
+            for (ColumnAttributes attr : columnAttributes)
             {
-                outputWriter.write(columnAttributes.get(i).name + "\t");
+                outputWriter.write(attr.name + "\t");
+            }
+            outputWriter.write("\n");
+
+            /// Write data from queue
+            for(ColumnAttributes attr : columnAttributes)
+            {
+                /// Create field using column attributes
+                String field = queryResponse.substring(attr.startValue - 1, attr.endValue);
+                outputWriter.write(field + "\t");
             }
             outputWriter.write("\n");
 
             outputWriter.close();
         }
-        catch(IOException e)
+        catch(IOException ex)
         {
-            e.printStackTrace();
+            System.out.println("IOException triggered:" + ex.getMessage());
         }
 
 
