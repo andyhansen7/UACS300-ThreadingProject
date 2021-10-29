@@ -1,6 +1,6 @@
 # Define a variable for classpath
 CLASS_PATH = .
-JAVA_HOME=/usr/java/latest
+JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64/
 JAVA_PKG=edu/cs300
 
 
@@ -30,7 +30,8 @@ classes: $(CLASSES:.java=.class)
 
 CLASSES = \
 	$(JAVA_PKG)/ReportingSystem.java \
-        $(JAVA_PKG)/MessageJNI.java \
+	$(JAVA_PKG)/FileReaderThread.java \
+    $(JAVA_PKG)/MessageJNI.java \
 	$(JAVA_PKG)/DebugLog.java 
 
 classes: $(CLASSES:.java=.class)
