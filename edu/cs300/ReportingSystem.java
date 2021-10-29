@@ -14,18 +14,17 @@ public class ReportingSystem
 	  DebugLog.log("Starting Reporting System");
 	}
 
-
 	public Integer loadReportJobs()
 	{
 		Integer reportCounter = 0;
-		try {
-
+		try
+		{
 			   File file = new File("report_list.txt");
 			   Scanner reportList = new Scanner(file);
-			   Integer numFiles = Integer.parseInt(reportList.nextLine());
+			   reportCounter = Integer.parseInt(reportList.nextLine());
 
 			   /// Create and start threads
-			   for(Integer i = 1; i <= numFiles; i++)
+			   for(Integer i = 1; i <= reportCounter; i++)
 			   {
 				   String fileName = reportList.nextLine();
 				   DebugLog.log("loadReportJobs: Starting thread #" + i.toString() + " with filepath " + fileName);
@@ -39,11 +38,13 @@ public class ReportingSystem
 				 DebugLog.log("Load specs and create threads for each report\nStart thread to request, process and print reports");
 
 			   reportList.close();
-		} catch (FileNotFoundException ex) {
+		}
+		catch(FileNotFoundException ex)
+		{
 			  System.out.println("FileNotFoundException triggered:" + ex.getMessage());
 		}
-		return reportCounter;
 
+		return reportCounter;
 	}
 
 	public static void main(String[] args) throws FileNotFoundException

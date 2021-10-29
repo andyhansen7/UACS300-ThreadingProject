@@ -69,13 +69,13 @@ public class FileReaderThread implements Runnable
         }
 
         /// Send request on System V queue
-        MessageJNI.writeReportRequest(_id, 1, reportSearchString);
+        MessageJNI.writeReportRequest(_id, 2, reportSearchString);  /// TODO
 
         /// Wait for string return from c application
         Debug("sending query request to C application...");
         String queryResponse = MessageJNI.readReportRecord(_id);
 
-        Debug("recieved response from C application, processing record...");
+        Debug("received response from C application, processing record...");
     }
 
     private void Debug(String message)
