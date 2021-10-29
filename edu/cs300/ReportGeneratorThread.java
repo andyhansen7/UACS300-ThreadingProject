@@ -1,19 +1,20 @@
 package edu.cs300;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.util.Enumeration;
+import java.io.*;
 import java.util.Scanner;
-import java.util.Vector;
 import java.util.ArrayList;
 
-public class FileReaderThread implements Runnable
+public class ReportGeneratorThread extends Thread
 {
+    /// Class member variables
+    String _filepath;
+    Integer _id;
+
     /// Constructor
-    public FileReaderThread(Integer id, String filepath)
+    public ReportGeneratorThread(Integer id, String filepath)
     {
-        _id = id;
-        _filepath = filepath;
+        this._id = id;
+        this._filepath = filepath;
     }
 
     /// Method called by thread
@@ -73,17 +74,38 @@ public class FileReaderThread implements Runnable
 
         /// Wait for string return from c application
         Debug("sending query request to C application...");
-        String queryResponse = MessageJNI.readReportRecord(_id);
-
+        //String queryResponse = MessageJNI.readReportRecord(_id);
         Debug("received response from C application, processing record...");
+
+        /// Create output file
+        try
+        {
+            File outputReport = new File(outputFileName);
+            FileWriter outputWriter = new FileWriter(outputReport);
+
+            /// Write headers and title
+            outputWriter.write(reportTitle + "\n");
+            for(int i = 0; i < columnAttributes.size(); i++)
+            {
+                outputWriter.write(columnAttributes.get(i).name + "\t");
+            }
+            outputWriter.write("\n");
+
+            outputWriter.close();
+        }
+        catch(IOException e)
+        {
+            e.printStackTrace();
+        }
+
+
+        /// Close scanner
+        reportScanner.close();
+
     }
 
     private void Debug(String message)
     {
         DebugLog.log("Thread #" + _id + ": " + message);
     }
-
-    /// Class member variables
-    String _filepath = "";
-    Integer _id = -1;
 }

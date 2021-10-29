@@ -30,7 +30,7 @@ classes: $(CLASSES:.java=.class)
 
 CLASSES = \
 	$(JAVA_PKG)/ReportingSystem.java \
-	$(JAVA_PKG)/FileReaderThread.java \
+	$(JAVA_PKG)/ReportGeneratorThread.java \
     $(JAVA_PKG)/MessageJNI.java \
 	$(JAVA_PKG)/DebugLog.java 
 

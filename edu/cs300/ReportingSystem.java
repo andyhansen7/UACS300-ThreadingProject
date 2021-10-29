@@ -16,7 +16,10 @@ public class ReportingSystem
 
 	public Integer loadReportJobs()
 	{
+		/// Create variables for thread
 		Integer reportCounter = 0;
+		ArrayList<ReportGeneratorThread> fileReaders = new ArrayList<ReportGeneratorThread>();
+
 		try
 		{
 			   File file = new File("report_list.txt");
@@ -27,15 +30,15 @@ public class ReportingSystem
 			   for(Integer i = 1; i <= reportCounter; i++)
 			   {
 				   String fileName = reportList.nextLine();
+
 				   DebugLog.log("loadReportJobs: Starting thread #" + i.toString() + " with filepath " + fileName);
 
-				   FileReaderThread newThread = new FileReaderThread(i, fileName);
- 				   new Thread(newThread).start();
+				   ReportGeneratorThread newThread = new ReportGeneratorThread(i, fileName);
+				   fileReaders.add(newThread);
+
+				   /// Start thread
+				   newThread.start();
 			   }
-
-
- 		     //load specs and create threads for each report
-				 DebugLog.log("Load specs and create threads for each report\nStart thread to request, process and print reports");
 
 			   reportList.close();
 		}

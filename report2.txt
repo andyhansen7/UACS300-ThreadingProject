@@ -1,5 +1,5 @@
 Sales
-Purchas
+Purchase
 sales.rpt
 1-8,Tran Date
 11-21,Transaction

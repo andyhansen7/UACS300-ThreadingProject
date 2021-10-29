@@ -1,6 +1,6 @@
 Customer report: H Peck
 H Peck
-customer-peck.rpt
+customer-peck1.rpt
 1-8,Tran Date
 11-21,Transaction
 32-39,Customer
