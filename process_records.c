@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "report_record_formats.h"
 #include "queue_ids.h"
@@ -13,6 +14,19 @@
 #define bool int
 #define true 1
 #define false 0
+#define SIGINT  2
+
+// Protected variables
+int numReports = 1;
+int* responsesPerID;
+int numRecords = 0;
+bool interrupted = false;
+
+// Mutexes
+pthread_mutex_t responsesPerIDMutex;
+pthread_mutex_t numReportsMutex;
+pthread_mutex_t numRecordsMutex;
+pthread_mutex_t interruptedMutex;
 
 void processRecordsError(char* output)
 {
@@ -32,6 +46,100 @@ void printStatusReport(int numRecords, int numReports, int* recordsSentPerReport
     }
 };
 
+void handleInterrupt(int signal)
+{
+    processRecordsError("Ctrl+C received");
+    pthread_mutex_lock(&interruptedMutex);
+    interrupted = true;
+    pthread_mutex_unlock(&interruptedMutex);
+};
+
+void* getReportRecordBuf()
+{
+    return malloc(sizeof(report_record_buf));
+}
+
+void* getReportRequestBuf()
+{
+    return malloc(sizeof(report_request_buf));
+}
+
+void sendMessage(report_record_buf* record, size_t bufferLength)
+{
+    int msqid;
+    int msgflg = IPC_CREAT | 0666;
+    key_t key;
+
+    key = ftok(FILE_IN_HOME_DIR,1);
+    if(key == 0xffffffff)
+    {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        return;
+    }
+    if((msqid = msgget(key, msgflg)) < 0)
+    {
+        int errnum = errno;
+        fprintf(stderr, "Value of errno: %d\n", errno);
+        perror("(msgget)");
+        fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
+    }
+    else
+        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
+
+    // Send message
+    if((msgsnd(msqid, record, bufferLength, IPC_NOWAIT)) < 0) {
+        int errnum = errno;
+        fprintf(stderr,"%d, %ld, %s, %d\n", msqid, record->mtype, record->record, (int)bufferLength);
+        perror("(msgsnd)");
+        fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
+        exit(1);
+    }
+    else
+        fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", record->record,(int)bufferLength);
+}
+
+report_request_buf* getMessage()
+{
+    int msqid;
+    int msgflg = IPC_CREAT | 0666;
+    key_t key;
+    report_request_buf* buf = getReportRequestBuf();
+    size_t buf_length;
+
+    key = ftok(FILE_IN_HOME_DIR,QUEUE_NUMBER);
+    if (key == 0xffffffff) {
+        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
+        return NULL;
+    }
+
+    if ((msqid = msgget(key, msgflg)) < 0) {
+        int errnum = errno;
+        fprintf(stderr, "Value of errno: %d\n", errno);
+        perror("(msgget)");
+        fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
+    }
+    else
+        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
+
+
+    // Recieve message
+    int ret;
+    do {
+        ret = msgrcv(msqid, buf, sizeof(report_request_buf), 1, 0);
+        int errnum = errno;
+        if (ret < 0 && errno !=EINTR){
+            fprintf(stderr, "Value of errno: %d\n", errno);
+            perror("Error printed by perror");
+            fprintf(stderr, "Error receiving msg: %s\n", strerror( errnum ));
+        }
+    } while ((ret < 0 ) && (errno == 4));
+    //fprintf(stderr,"msgrcv error return code --%d:$d--",ret,errno);
+
+    fprintf(stderr,"process-msgrcv-request: msg type-%ld, Record %d of %d: %s ret/bytes rcv'd=%d\n", buf->mtype, buf->report_idx, buf->report_count, buf->search_string, ret);
+
+    return buf;
+}
+
 int main(int argc, char**argv)
 {
     // Local variables
@@ -40,31 +148,22 @@ int main(int argc, char**argv)
     int msgflg = IPC_CREAT | 0666;
     key_t key;
 
-    // Send / Receive
-    report_request_buf rbuf;
-    report_record_buf sbuf;
-    size_t buf_length;
-
     // File reading
     struct reportrecordbuf* records;
-    int numRecords = 0;
     char line[RECORD_FIELD_LENGTH+1];
-    
+
     // Main routine
     bool firstRequestRecieved = false;
-    int numReports = 1;
     int messagesRecieved = 0;
-    int* responsesPerID;
 
-    // Mutexes
-    pthread_mutex_t responsesPerIDMutex;
-    pthread_mutex_t numReportsMutex;
-    pthread_mutex_t numRecordsMutex;
+    // Signal handling
+    signal(SIGINT, handleInterrupt);
 
     // Initialize mutexes
     int init_ret0 = pthread_mutex_init(&responsesPerIDMutex, NULL);
     int init_ret1 = pthread_mutex_init(&numReportsMutex, NULL);
     int init_ret2 = pthread_mutex_init(&numRecordsMutex, NULL);
+    int init_ret3 = pthread_mutex_init(&interruptedMutex, NULL);
 
     // region // Provided Setup
     // Sanity check
@@ -115,19 +214,9 @@ int main(int argc, char**argv)
     //region // Main procedure
     while(true)
     {
-        // Receive message
-        int ret;
-        do
-        {
-            ret = msgrcv(msqid, &rbuf, sizeof(report_request_buf), 1, 0); //receive type 1 message
-            int errnum = errno;
-            if (ret < 0 && errno !=EINTR)
-            {
-                fprintf(stderr, "Value of errno: %d\n", errno);
-                perror("Error printed by perror");
-                fprintf(stderr, "Error receiving msg: %s\n", strerror( errnum ));
-            }
-        } while((ret < 0 ) && (errno == 4));
+        // Get message from queue
+        report_request_buf* response = getReportRequestBuf();
+
         messagesRecieved++;
 
         // Set number of records if not already set
@@ -136,7 +225,7 @@ int main(int argc, char**argv)
             processRecordsError("First request received");
 
             pthread_mutex_lock(&numReportsMutex);
-            numReports = rbuf.report_count;
+            numReports = response->report_count;
             pthread_mutex_unlock(&numReportsMutex);
 
             firstRequestRecieved = true;
@@ -148,9 +237,9 @@ int main(int argc, char**argv)
         }
 
         // Load variables from message
-        int id = rbuf.report_idx;
+        int id = response->report_idx;
         char search[11];
-        strcpy(rbuf.search_string, search);
+        strcpy(response->search_string, search);
 
         // Search for string in list read
         for(int i = 0; i < numRecords; i++)
@@ -166,38 +255,18 @@ int main(int argc, char**argv)
                 responsesPerID[id]++;
 
                 // Send report on correct queue
-                sbuf.mtype = 1;
-                strcpy(sbuf.record,currentReport.record);
-                buf_length = strlen(sbuf.record) + sizeof(int) + 1;//struct size without mtype
-
-                // Send a message.
-                if((msgsnd(msqid, &sbuf, buf_length, IPC_NOWAIT)) < 0) {
-                    int errnum = errno;
-                    fprintf(stderr,"%d, %ld, %s, %d\n", msqid, sbuf.mtype, sbuf.record, (int)buf_length);
-                    perror("(msgsnd)");
-                    fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
-                    exit(1);
-                }
-                else
-                    fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", sbuf.record,(int)buf_length);
+                report_record_buf* queryResult = getReportRecordBuf();
+                queryResult->mtype = 1;
+                strcpy(queryResult->record, currentReport.record);
+                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1));
             }
         }
 
-        // Send report on correct queue
-        sbuf.mtype = 1;
-        strcpy(sbuf.record,"");
-        buf_length = strlen(sbuf.record) + sizeof(int) + 1;//struct size without mtype
-
         // Send message with no payload to let Java program know to complete
-        if((msgsnd(msqid, &sbuf, buf_length, IPC_NOWAIT)) < 0) {
-            int errnum = errno;
-            fprintf(stderr,"%d, %ld, %s, %d\n", msqid, sbuf.mtype, sbuf.record, (int)buf_length);
-            perror("(msgsnd)");
-            fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
-            exit(1);
-        }
-        else
-            fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", sbuf.record,(int)buf_length);
+        report_record_buf* nullBuf = getReportRecordBuf();
+        nullBuf->mtype = 1;
+        strcpy(nullBuf->record, "");
+        sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1));
 
         // Escape loop if complete
         pthread_mutex_lock(&numReportsMutex);
@@ -207,6 +276,15 @@ int main(int argc, char**argv)
             break;
         }
         pthread_mutex_unlock(&numReportsMutex);
+
+        // Escape loop if Ctrl+C
+        pthread_mutex_lock(&interruptedMutex);
+        if(interrupted == true)
+        {
+            pthread_mutex_unlock(&interruptedMutex);
+            break;
+        }
+        pthread_mutex_unlock(&interruptedMutex);
     }
     // endregion
 

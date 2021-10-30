@@ -75,40 +75,42 @@ public class ReportGeneratorThread extends Thread
         Debug("sending query request to C application...");
         MessageJNI.writeReportRequest(_id, 1, reportSearchString);
 
-        /// Wait for string return from c application
-        String queryResponse = MessageJNI.readReportRecord(_id);
-        Debug("received response from C application, processing record...");
-
         /// Create output file
-        try
+        while(true)
         {
-            File outputReport = new File(outputFileName);
-            FileWriter outputWriter = new FileWriter(outputReport);
+        	// Get response from C application
+        	String queryResponse = MessageJNI.readReportRecord(_id);
+        	if(queryResponse.length() == 0) break;
 
-            /// Write headers and title
-            outputWriter.write(reportTitle + "\n");
-            for(ColumnAttributes attr : columnAttributes)
-            {
-                outputWriter.write(attr.name + "\t");
-            }
-            outputWriter.write("\n");
+			try
+			{
+				File outputReport = new File(outputFileName);
+				FileWriter outputWriter = new FileWriter(outputReport);
 
-            /// Write data from queue
-            for(ColumnAttributes attr : columnAttributes)
-            {
-                /// Create field using column attributes
-                String field = queryResponse.substring(attr.startValue - 1, attr.endValue);
-                outputWriter.write(field + "\t");
-            }
-            outputWriter.write("\n");
+				/// Write headers and title
+				outputWriter.write(reportTitle + "\n");
+				for(ColumnAttributes attr : columnAttributes)
+				{
+					outputWriter.write(attr.name + "\t");
+				}
+				outputWriter.write("\n");
 
-            outputWriter.close();
-        }
-        catch(IOException ex)
-        {
-            System.out.println("IOException triggered:" + ex.getMessage());
-        }
+				/// Write data from queue
+				for(ColumnAttributes attr : columnAttributes)
+				{
+					/// Create field using column attributes
+					String field = queryResponse.substring(attr.startValue - 1, attr.endValue);
+					outputWriter.write(field + "\t");
+				}
+				outputWriter.write("\n");
 
+				outputWriter.close();
+			}
+			catch(IOException ex)
+			{
+				System.out.println("IOException triggered:" + ex.getMessage());
+			}
+		}
 
         /// Close scanner
         reportScanner.close();
