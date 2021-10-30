@@ -1,6 +1,6 @@
 Sales
 Purchase
-sales.rpt
+sales1.rpt
 1-8,Tran Date
 11-21,Transaction
 52-56,$Part

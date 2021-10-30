@@ -73,44 +73,44 @@ public class ReportGeneratorThread extends Thread
 
         /// Send request on System V queue
         Debug("sending query request to C application...");
-        MessageJNI.writeReportRequest(_id, 1, reportSearchString);
+        MessageJNI.writeReportRequest(_id, _numReports, reportSearchString);
 
-        /// Create output file
-        while(true)
+        try
         {
-        	// Get response from C application
-        	String queryResponse = MessageJNI.readReportRecord(_id);
-        	if(queryResponse.length() == 0) break;
+            File outputReport = new File(outputFileName);
+            FileWriter outputWriter = new FileWriter(outputReport);
 
-			try
-			{
-				File outputReport = new File(outputFileName);
-				FileWriter outputWriter = new FileWriter(outputReport);
+            /// Write headers and title
+            outputWriter.write(reportTitle + "\n");
+            for(ColumnAttributes attr : columnAttributes)
+            {
+                outputWriter.write(attr.name + "\t");
+            }
+            outputWriter.write("\n");
 
-				/// Write headers and title
-				outputWriter.write(reportTitle + "\n");
-				for(ColumnAttributes attr : columnAttributes)
-				{
-					outputWriter.write(attr.name + "\t");
-				}
-				outputWriter.write("\n");
+            /// Create output file
+            while (true)
+            {
+                // Get response from C application
+                String queryResponse = MessageJNI.readReportRecord(_id);
+                if (queryResponse.length() == 0) break;
 
-				/// Write data from queue
-				for(ColumnAttributes attr : columnAttributes)
-				{
-					/// Create field using column attributes
-					String field = queryResponse.substring(attr.startValue - 1, attr.endValue);
-					outputWriter.write(field + "\t");
-				}
-				outputWriter.write("\n");
+                /// Write data from queue
+                for (ColumnAttributes attr : columnAttributes) {
+                    /// Create field using column attributes
+                    String field = queryResponse.substring(attr.startValue - 1, attr.endValue);
+                    outputWriter.write(field + "\t");
+                }
+                outputWriter.write("\n");
+            }
 
-				outputWriter.close();
-			}
-			catch(IOException ex)
-			{
-				System.out.println("IOException triggered:" + ex.getMessage());
-			}
-		}
+            // Close writer
+            outputWriter.close();
+        }
+        catch(IOException ex)
+        {
+            System.out.println("IOException triggered:" + ex.getMessage());
+        }
 
         /// Close scanner
         reportScanner.close();

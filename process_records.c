@@ -52,6 +52,7 @@ void handleInterrupt(int signal)
     pthread_mutex_lock(&interruptedMutex);
     interrupted = true;
     pthread_mutex_unlock(&interruptedMutex);
+    exit(0);
 };
 
 void* getReportRecordBuf()
@@ -64,13 +65,13 @@ void* getReportRequestBuf()
     return malloc(sizeof(report_request_buf));
 }
 
-void sendMessage(report_record_buf* record, size_t bufferLength)
+void sendMessage(report_record_buf* record, size_t bufferLength, int queueID)
 {
     int msqid;
     int msgflg = IPC_CREAT | 0666;
     key_t key;
 
-    key = ftok(FILE_IN_HOME_DIR,1);
+    key = ftok(FILE_IN_HOME_DIR, queueID);
     if(key == 0xffffffff)
     {
         fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
@@ -83,8 +84,8 @@ void sendMessage(report_record_buf* record, size_t bufferLength)
         perror("(msgget)");
         fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
     }
-    else
-        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
+//    else
+//        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
 
     // Send message
     if((msgsnd(msqid, record, bufferLength, IPC_NOWAIT)) < 0) {
@@ -94,8 +95,8 @@ void sendMessage(report_record_buf* record, size_t bufferLength)
         fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
         exit(1);
     }
-    else
-        fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", record->record,(int)bufferLength);
+//    else
+        //fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", record->record,(int)bufferLength);
 }
 
 report_request_buf* getMessage()
@@ -121,7 +122,6 @@ report_request_buf* getMessage()
     else
         fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
 
-
     // Recieve message
     int ret;
     do {
@@ -133,23 +133,26 @@ report_request_buf* getMessage()
             fprintf(stderr, "Error receiving msg: %s\n", strerror( errnum ));
         }
     } while ((ret < 0 ) && (errno == 4));
-    //fprintf(stderr,"msgrcv error return code --%d:$d--",ret,errno);
 
-    fprintf(stderr,"process-msgrcv-request: msg type-%ld, Record %d of %d: %s ret/bytes rcv'd=%d\n", buf->mtype, buf->report_idx, buf->report_count, buf->search_string, ret);
+    //fprintf(stderr,"process-msgrcv-request: msg type-%ld, Record %d of %d: %s ret/bytes rcv'd=%d\n", buf->mtype, buf->report_idx, buf->report_count, buf->search_string, ret);
 
     return buf;
 }
 
+typedef struct recordlistnode
+{
+    struct recordlistnode* next;
+    struct recordlistnode* prev;
+    report_record_buf* record;
+} record_list_node;
+
 int main(int argc, char**argv)
 {
     // Local variables
-    // Queue-related
-    int msqid;
-    int msgflg = IPC_CREAT | 0666;
-    key_t key;
-
     // File reading
-    struct reportrecordbuf* records;
+//    report_record_buf* records;
+    record_list_node* head = NULL;
+    record_list_node* tail = NULL;
     char line[RECORD_FIELD_LENGTH+1];
 
     // Main routine
@@ -164,43 +167,53 @@ int main(int argc, char**argv)
     int init_ret1 = pthread_mutex_init(&numReportsMutex, NULL);
     int init_ret2 = pthread_mutex_init(&numRecordsMutex, NULL);
     int init_ret3 = pthread_mutex_init(&interruptedMutex, NULL);
-
-    // region // Provided Setup
-    // Sanity check
-    key = ftok(FILE_IN_HOME_DIR, QUEUE_NUMBER);
-    if(key == 0xffffffff) {
-        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
-        return 1;
-    }
-
-    // Error handling
-    if((msqid = msgget(key, msgflg)) < 0) {
-        int errnum = errno;
-        fprintf(stderr, "Value of errno: %d\n", errno);
-        perror("(msgget)");
-        fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
-    }
-    else
-        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
-    // endregion
+    processRecordsError("setup complete!\n");
 
     //region // Read from stdin
     while(fgets(line, sizeof line, stdin))
     {
         // Check length is within bounds
         size_t eol = strcspn(line, "\n");
+        fprintf(stderr, "loaded record line: %s\n", line);
         line[eol] = '\0';
         if(eol >= RECORD_FIELD_LENGTH)
         {
-            processRecordsError("Line too long!");
+            //processRecordsError("line too long!");
+            fprintf(stderr, "line too long: %s\n", line);
             break;
         }
+        else if(strlen(line) < 2) break;
 
         // Add line to dictionary
-        struct reportrecordbuf newRecord;
-        newRecord.mtype = 1;
-        strcpy(line, newRecord.record);
-
+        report_record_buf* newRecord = malloc(sizeof(report_record_buf));
+        newRecord->mtype = 2;
+        strcpy(newRecord->record, line);
+        fprintf(stderr, "new record is: %s\n", newRecord->record);
+        
+        record_list_node* newNode = malloc(sizeof(record_list_node));
+        newNode->record = newRecord;
+        newNode->next = NULL;
+        newNode->prev = NULL;
+        if(head == NULL)
+        {
+            head = newNode;
+        }
+        else
+        {
+            if(tail == NULL)
+            {
+                tail = newNode;
+                head->next = newNode;
+                newNode->prev = head;
+            }
+            else
+            {
+                newNode->prev = tail;
+                tail->next = newNode;
+                tail = newNode;
+            }
+        }
+        
         pthread_mutex_lock(&numRecordsMutex);
         numRecords++;
         pthread_mutex_unlock(&numRecordsMutex);
@@ -208,28 +221,27 @@ int main(int argc, char**argv)
     // endregion
 
     //region // Create thread
-    pthread_t statusThread;
+//    pthread_t statusThread;
 //    pthread_create(&statusThread, NULL, , NULL);
 
     //region // Main procedure
     while(true)
     {
         // Get message from queue
-        report_request_buf* response = getReportRequestBuf();
-
+        report_request_buf* response = getMessage();
+        fprintf(stderr, "received response with query: %s\n", response->search_string);
         messagesRecieved++;
 
         // Set number of records if not already set
         if(firstRequestRecieved == false)
         {
-            processRecordsError("First request received");
-
             pthread_mutex_lock(&numReportsMutex);
             numReports = response->report_count;
             pthread_mutex_unlock(&numReportsMutex);
 
             firstRequestRecieved = true;
 
+            responsesPerID = (int*)malloc(sizeof(int) * numReports);
             for(int i = 0; i < numReports; i++)
             {
                 responsesPerID[i] = 0;
@@ -239,26 +251,29 @@ int main(int argc, char**argv)
         // Load variables from message
         int id = response->report_idx;
         char search[11];
-        strcpy(response->search_string, search);
+        strcpy(search, response->search_string);
 
         // Search for string in list read
-        for(int i = 0; i < numRecords; i++)
+        for(record_list_node* currentNode = head; currentNode != NULL; currentNode = currentNode->next)
         {
             // Load struct
-            const struct reportrecordbuf currentReport = records[i];
+            report_record_buf* currentRecord = currentNode->record;
+            //fprintf(stderr, "current report: %s\n", currentRecord->record);
 
             // If contains search, send it
-            msqid = id;
-            if(strstr(currentReport.record, search))
+            if(strstr(currentRecord->record, search) != NULL)
             {
+                fprintf(stderr, "found match: %s\n", currentRecord->record);
                 // Increment number of responses
                 responsesPerID[id]++;
 
                 // Send report on correct queue
                 report_record_buf* queryResult = getReportRecordBuf();
                 queryResult->mtype = 1;
-                strcpy(queryResult->record, currentReport.record);
-                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1));
+                strcpy(queryResult->record, currentRecord->record);
+                fprintf(stderr, "Search string: %s\n", search);
+                fprintf(stderr,"Response: %s\n", queryResult->record);
+                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), id);
             }
         }
 
@@ -266,13 +281,19 @@ int main(int argc, char**argv)
         report_record_buf* nullBuf = getReportRecordBuf();
         nullBuf->mtype = 1;
         strcpy(nullBuf->record, "");
-        sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1));
+        sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), id);
 
         // Escape loop if complete
         pthread_mutex_lock(&numReportsMutex);
-        if(messagesRecieved != numReports)
+        if(messagesRecieved == numReports)
         {
             pthread_mutex_unlock(&numReportsMutex);
+            processRecordsError("exiting after completing all requests");
+            
+            pthread_mutex_lock(&interruptedMutex);
+            interrupted = true;
+            pthread_mutex_unlock(&interruptedMutex);
+
             break;
         }
         pthread_mutex_unlock(&numReportsMutex);
@@ -282,6 +303,7 @@ int main(int argc, char**argv)
         if(interrupted == true)
         {
             pthread_mutex_unlock(&interruptedMutex);
+            processRecordsError("exiting from Ctrl+C");
             break;
         }
         pthread_mutex_unlock(&interruptedMutex);
