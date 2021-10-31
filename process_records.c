@@ -11,6 +11,7 @@
 #include "report_record_formats.h"
 #include "queue_ids.h"
 #include "message_utils.h"
+#include "record_list.h"
 
 // I like C++ better
 #define bool int
@@ -18,13 +19,6 @@
 #define false 0
 #define SIGINT  2
 
-// Linked list type
-typedef struct recordlistnode
-{
-    struct recordlistnode* next;
-    struct recordlistnode* prev;
-    report_record_buf* record;
-} record_list_node;
 
 // Protected variables
 int numReports = 1;
@@ -141,11 +135,8 @@ int main(int argc, char**argv)
         newRecord->mtype = 2;
         strcpy(newRecord->record, line);
         fprintf(stderr, "new record is: %s\n", newRecord->record);
-        
-        record_list_node* newNode = malloc(sizeof(record_list_node));
-        newNode->record = newRecord;
-        newNode->next = NULL;
-        newNode->prev = NULL;
+
+        record_list_node* newNode = getRecordListNode(newRecord);
 
         pthread_mutex_lock(&recordListMutex);
             // List is empty
