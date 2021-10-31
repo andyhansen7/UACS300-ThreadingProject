@@ -11,22 +11,50 @@
 #include "report_record_formats.h"
 #include "queue_ids.h"
 
+// I like C++ better
 #define bool int
 #define true 1
 #define false 0
 #define SIGINT  2
 
+// Linked list type
+typedef struct recordlistnode
+{
+    struct recordlistnode* next;
+    struct recordlistnode* prev;
+    report_record_buf* record;
+} record_list_node;
+
 // Protected variables
 int numReports = 1;
-int* responsesPerID;
 int numRecords = 0;
+record_list_node* head = NULL;
+record_list_node* tail = NULL;
 bool interrupted = false;
+int* responsesPerQueue;
 
 // Mutexes
-pthread_mutex_t responsesPerIDMutex;
+pthread_mutex_t recordListMutex;
 pthread_mutex_t numReportsMutex;
 pthread_mutex_t numRecordsMutex;
 pthread_mutex_t interruptedMutex;
+pthread_mutex_t responsesPerQueueMutex;
+
+int getResponses(int queue)
+{
+    int ret;
+    pthread_mutex_lock(&responsesPerQueueMutex);
+        ret = responsesPerQueue[queue];
+    pthread_mutex_unlock(&responsesPerQueueMutex);
+    return ret;
+}
+
+void incResponses(int queue)
+{
+    pthread_mutex_lock(&responsesPerQueueMutex);
+        responsesPerQueue[queue]++;
+    pthread_mutex_unlock(&responsesPerQueueMutex);
+}
 
 void processRecordsError(char* output)
 {
@@ -35,25 +63,44 @@ void processRecordsError(char* output)
     fprintf(stderr, "\n");
 }
 
-void printStatusReport(int numRecords, int numReports, int* recordsSentPerReport)
+void printStatusReport()
 {
-    fprintf(stdout, "***REPORT***\n");
-    fprintf(stdout, "%d records read for %d reports\n", numRecords, numReports);
+    // load values
+    int numRec, numRep;
+    pthread_mutex_lock(&numRecordsMutex);
+        numRec = numRecords;
+    pthread_mutex_unlock(&numRecordsMutex);
+    pthread_mutex_lock(&numReportsMutex);
+        numRep = numReports;
+    pthread_mutex_unlock(&numReportsMutex);
 
-    for(int i = 0; i < numReports; i++)
+    fprintf(stdout, "***REPORT***\n");
+    fprintf(stdout, "%d records read for %d reports\n", numRec, numRep);
+
+
+    record_list_node* currentNode;
+    pthread_mutex_lock(&recordListMutex);
+        currentNode = head;
+    pthread_mutex_unlock(&recordListMutex);
+    for(int i = 0; i < numRep; i++)
     {
-        fprintf(stdout, "Records sent for report index %d: %d\n", i, recordsSentPerReport[i]);
+        fprintf(stdout, "Records sent for report index %d: %d\n", i, getResponses(i));
     }
 };
 
 void handleInterrupt(int signal)
 {
-    processRecordsError("Ctrl+C received");
     pthread_mutex_lock(&interruptedMutex);
-    interrupted = true;
+        interrupted = true;
     pthread_mutex_unlock(&interruptedMutex);
-    exit(0);
+
 };
+
+void *statusPrintingThread(void* arg)
+{
+    while(interrupted == false) {}
+    printStatusReport();
+}
 
 void* getReportRecordBuf()
 {
@@ -84,8 +131,6 @@ void sendMessage(report_record_buf* record, size_t bufferLength, int queueID)
         perror("(msgget)");
         fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
     }
-//    else
-//        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
 
     // Send message
     if((msgsnd(msqid, record, bufferLength, IPC_NOWAIT)) < 0) {
@@ -95,8 +140,6 @@ void sendMessage(report_record_buf* record, size_t bufferLength, int queueID)
         fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
         exit(1);
     }
-//    else
-        //fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", record->record,(int)bufferLength);
 }
 
 report_request_buf* getMessage()
@@ -134,25 +177,12 @@ report_request_buf* getMessage()
         }
     } while ((ret < 0 ) && (errno == 4));
 
-    //fprintf(stderr,"process-msgrcv-request: msg type-%ld, Record %d of %d: %s ret/bytes rcv'd=%d\n", buf->mtype, buf->report_idx, buf->report_count, buf->search_string, ret);
-
     return buf;
 }
-
-typedef struct recordlistnode
-{
-    struct recordlistnode* next;
-    struct recordlistnode* prev;
-    report_record_buf* record;
-} record_list_node;
 
 int main(int argc, char**argv)
 {
     // Local variables
-    // File reading
-//    report_record_buf* records;
-    record_list_node* head = NULL;
-    record_list_node* tail = NULL;
     char line[RECORD_FIELD_LENGTH+1];
 
     // Main routine
@@ -163,11 +193,10 @@ int main(int argc, char**argv)
     signal(SIGINT, handleInterrupt);
 
     // Initialize mutexes
-    int init_ret0 = pthread_mutex_init(&responsesPerIDMutex, NULL);
+    int init_ret0 = pthread_mutex_init(&recordListMutex, NULL);
     int init_ret1 = pthread_mutex_init(&numReportsMutex, NULL);
     int init_ret2 = pthread_mutex_init(&numRecordsMutex, NULL);
     int init_ret3 = pthread_mutex_init(&interruptedMutex, NULL);
-    processRecordsError("setup complete!\n");
 
     //region // Read from stdin
     while(fgets(line, sizeof line, stdin))
@@ -194,35 +223,42 @@ int main(int argc, char**argv)
         newNode->record = newRecord;
         newNode->next = NULL;
         newNode->prev = NULL;
-        if(head == NULL)
-        {
-            head = newNode;
-        }
-        else
-        {
-            if(tail == NULL)
+
+        pthread_mutex_lock(&recordListMutex);
+            // List is empty
+            if(head == NULL)
             {
-                tail = newNode;
-                head->next = newNode;
-                newNode->prev = head;
+                head = newNode;
             }
             else
             {
-                newNode->prev = tail;
-                tail->next = newNode;
-                tail = newNode;
+                // head is only node
+                if(tail == NULL)
+                {
+                    tail = newNode;
+                    head->next = newNode;
+                    newNode->prev = head;
+                }
+
+                // average case
+                else
+                {
+                    newNode->prev = tail;
+                    tail->next = newNode;
+                    tail = newNode;
+                }
             }
-        }
+        pthread_mutex_unlock(&recordListMutex);
         
         pthread_mutex_lock(&numRecordsMutex);
-        numRecords++;
+            numRecords++;
         pthread_mutex_unlock(&numRecordsMutex);
     }
     // endregion
 
     //region // Create thread
-//    pthread_t statusThread;
-//    pthread_create(&statusThread, NULL, , NULL);
+    pthread_t statusThread;
+    pthread_create(&statusThread, NULL, statusPrintingThread, NULL);
 
     //region // Main procedure
     while(true)
@@ -236,52 +272,59 @@ int main(int argc, char**argv)
         if(firstRequestRecieved == false)
         {
             pthread_mutex_lock(&numReportsMutex);
-            numReports = response->report_count;
+                numReports = response->report_count;
             pthread_mutex_unlock(&numReportsMutex);
 
             firstRequestRecieved = true;
 
-            responsesPerID = (int*)malloc(sizeof(int) * numReports);
-            for(int i = 0; i < numReports; i++)
-            {
-                responsesPerID[i] = 0;
-            }
+            responsesPerQueue = malloc(sizeof(int) * response->report_count);
+            for(int i = 0; i < response->report_count; i++) responsesPerQueue[i] = 0;
         }
 
         // Load variables from message
-        int id = response->report_idx;
         char search[11];
         strcpy(search, response->search_string);
 
         // Search for string in list read
-        for(record_list_node* currentNode = head; currentNode != NULL; currentNode = currentNode->next)
+        pthread_mutex_lock(&recordListMutex);
+            record_list_node* currentNode = head;
+        pthread_mutex_unlock(&recordListMutex);
+
+        while(currentNode != NULL)
         {
             // Load struct
             report_record_buf* currentRecord = currentNode->record;
-            //fprintf(stderr, "current report: %s\n", currentRecord->record);
 
             // If contains search, send it
             if(strstr(currentRecord->record, search) != NULL)
             {
-                fprintf(stderr, "found match: %s\n", currentRecord->record);
-                // Increment number of responses
-                responsesPerID[id]++;
+                // increment counter for queue
+                incResponses(response->report_idx - 1);
 
                 // Send report on correct queue
                 report_record_buf* queryResult = getReportRecordBuf();
-                queryResult->mtype = 1;
+                queryResult->mtype = 2;
                 strcpy(queryResult->record, currentRecord->record);
+
                 fprintf(stderr, "Search string: %s\n", search);
                 fprintf(stderr,"Response: %s\n", queryResult->record);
-                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), id);
+                fprintf(stderr, "Queue ID: %d\n", response->report_idx);
+                fprintf(stderr, "Total responses to queue: %d\n", getResponses(response->report_idx));
+
+                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), response->report_idx);
             }
+
+            // Update current node
+            pthread_mutex_lock(&recordListMutex);
+                currentNode = currentNode->next;
+            pthread_mutex_unlock(&recordListMutex);
         }
 
         // Send message with no payload to let Java program know to complete
         report_record_buf* nullBuf = getReportRecordBuf();
-        nullBuf->mtype = 1;
+        nullBuf->mtype = 2;
         strcpy(nullBuf->record, "");
-        sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), id);
+        sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), response->report_idx);
 
         // Escape loop if complete
         pthread_mutex_lock(&numReportsMutex);
@@ -291,7 +334,7 @@ int main(int argc, char**argv)
             processRecordsError("exiting after completing all requests");
             
             pthread_mutex_lock(&interruptedMutex);
-            interrupted = true;
+                interrupted = true;
             pthread_mutex_unlock(&interruptedMutex);
 
             break;
@@ -310,5 +353,6 @@ int main(int argc, char**argv)
     }
     // endregion
 
+    pthread_join(statusThread, NULL);
     exit(0);
 }

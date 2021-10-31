@@ -47,7 +47,6 @@ public class ReportGeneratorThread extends Thread
 
         /// Load column data
         ArrayList<ColumnAttributes> columnAttributes = new ArrayList<ColumnAttributes>();
-        int index = 0;
         while(reportScanner.hasNextLine())
         {
             String columnData = reportScanner.nextLine();
@@ -68,7 +67,6 @@ public class ReportGeneratorThread extends Thread
 
             /// Load array
             columnAttributes.add(columnAttribute);
-            index++;
         }
 
         /// Send request on System V queue
@@ -87,6 +85,8 @@ public class ReportGeneratorThread extends Thread
                 outputWriter.write(attr.name + "\t");
             }
             outputWriter.write("\n");
+
+            Debug("Wrote headers");
 
             /// Create output file
             while (true)
