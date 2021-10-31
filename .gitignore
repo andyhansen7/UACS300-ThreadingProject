@@ -1,1 +1,5 @@
 /edu/cs300/*.class
+msgrcv
+msgsnd
+process_records
+*.o
