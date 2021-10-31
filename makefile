@@ -42,7 +42,7 @@ edu_cs300_MessageJNI.h: $(JAVA_PKG)/MessageJNI.java
 	javac -h . $(JAVA_PKG)/MessageJNI.java
     
 process_records:process_records.c report_record_formats.h message_utils.h record_list.h
-	gcc -std=c99 -pthread -D_GNU_SOURCE $(MAC_FLAG) process_records.c -o process_records
+	gcc -std=c99 -pthread -lpthread -D_GNU_SOURCE $(MAC_FLAG) process_records.c -o process_records
 
 edu_cs300_MessageJNI.o:report_record_formats.h edu_cs300_MessageJNI.h system5_msg.c queue_ids.h
 	gcc -c -fPIC -I${JAVA_HOME}/include -I${JAVA_HOME}/include/$(OSFLAG) -D$(OSFLAG) system5_msg.c -o edu_cs300_MessageJNI.o

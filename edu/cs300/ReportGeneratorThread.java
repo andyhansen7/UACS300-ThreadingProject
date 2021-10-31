@@ -23,12 +23,17 @@ public class ReportGeneratorThread extends Thread
     public void run()
     {
         /// Init file and scanner
-        File report= new File(_filepath);
+        File report = null;
         Scanner reportScanner = null;
 
         try
         {
+            report = new File(_filepath);
             reportScanner = new Scanner(report);
+        }
+        catch (NullPointerException ex)
+        {
+            System.out.println("NullPointerException triggered triggered:" + ex.getMessage());
         }
         catch (FileNotFoundException ex)
         {
@@ -70,7 +75,6 @@ public class ReportGeneratorThread extends Thread
         }
 
         /// Send request on System V queue
-        Debug("sending query request to C application...");
         MessageJNI.writeReportRequest(_id, _numReports, reportSearchString);
 
         try
@@ -85,8 +89,6 @@ public class ReportGeneratorThread extends Thread
                 outputWriter.write(attr.name + "\t");
             }
             outputWriter.write("\n");
-
-            Debug("Wrote headers");
 
             /// Create output file
             while (true)

@@ -1,3 +1,11 @@
+/** CS300 Threading Project - process_records.c
+ *  Andy Hansen, arhansen@crimson.ua.edu
+ *  A C application to respond to queries from another application
+ *  using the System V queue. Data is loaded from stdin and responses
+ *  are sent on queues provided in the messages recieved
+ */
+
+// STL libraries
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
@@ -8,6 +16,7 @@
 #include <pthread.h>
 #include <signal.h>
 
+// Headers
 #include "report_record_formats.h"
 #include "queue_ids.h"
 #include "message_utils.h"
@@ -19,7 +28,7 @@
 #define false 0
 #define SIGINT  2
 
-
+//region Global Variables
 // Protected variables
 int numReports = 1;
 int numRecords = 0;
@@ -34,7 +43,9 @@ pthread_mutex_t numReportsMutex;
 pthread_mutex_t numRecordsMutex;
 pthread_mutex_t interruptedMutex;
 pthread_mutex_t responsesPerQueueMutex;
+//endregion
 
+//region ResponsesPerQueue helper functions
 int getResponses(int queue)
 {
     int ret;
@@ -50,13 +61,7 @@ void incResponses(int queue)
         responsesPerQueue[queue]++;
     pthread_mutex_unlock(&responsesPerQueueMutex);
 }
-
-void processRecordsError(char* output)
-{
-    fprintf(stderr, "ProcessRecords.c: ");
-    fprintf(stderr, "%s", output);
-    fprintf(stderr, "\n");
-}
+// endregion
 
 void printStatusReport()
 {
@@ -99,6 +104,7 @@ void *statusPrintingThread(void* arg)
 
 int main(int argc, char**argv)
 {
+    //region Local Variables
     // Local variables
     char line[RECORD_FIELD_LENGTH+1];
 
@@ -114,13 +120,14 @@ int main(int argc, char**argv)
     int init_ret1 = pthread_mutex_init(&numReportsMutex, NULL);
     int init_ret2 = pthread_mutex_init(&numRecordsMutex, NULL);
     int init_ret3 = pthread_mutex_init(&interruptedMutex, NULL);
+    //endregion
 
-    //region // Read from stdin
+    //region Read from stdin
     while(fgets(line, sizeof line, stdin))
     {
         // Check length is within bounds
         size_t eol = strcspn(line, "\n");
-        fprintf(stderr, "loaded record line: %s\n", line);
+        fprintf(stderr, "system loaded record: %.24s ...\n", line);
         line[eol] = '\0';
         if(eol >= RECORD_FIELD_LENGTH)
         {
@@ -134,7 +141,6 @@ int main(int argc, char**argv)
         report_record_buf* newRecord = malloc(sizeof(report_record_buf));
         newRecord->mtype = 2;
         strcpy(newRecord->record, line);
-        fprintf(stderr, "new record is: %s\n", newRecord->record);
 
         record_list_node* newNode = getRecordListNode(newRecord);
 
@@ -170,11 +176,12 @@ int main(int argc, char**argv)
     }
     // endregion
 
-    //region // Create thread
+    //region Status thread
     pthread_t statusThread;
     pthread_create(&statusThread, NULL, statusPrintingThread, NULL);
+    //endregion
 
-    //region // Main procedure
+    //region Main procedure
     while(true)
     {
         // Get message from queue
@@ -221,9 +228,9 @@ int main(int argc, char**argv)
                 strcpy(queryResult->record, currentRecord->record);
 
                 fprintf(stderr, "Search string: %s\n", search);
-                fprintf(stderr,"Response: %s\n", queryResult->record);
+                fprintf(stderr,"Response: %.24s ...\n", queryResult->record);
                 fprintf(stderr, "Queue ID: %d\n", response->report_idx);
-                fprintf(stderr, "Total responses to queue: %d\n", getResponses(response->report_idx));
+                fprintf(stderr, "Total responses to queue: %d\n\n", getResponses(response->report_idx - 1));
 
                 sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), response->report_idx);
             }
@@ -245,7 +252,7 @@ int main(int argc, char**argv)
         if(messagesRecieved == numReports)
         {
             pthread_mutex_unlock(&numReportsMutex);
-            processRecordsError("exiting after completing all requests");
+            fprintf(stderr, "Exiting after completing all requests!\n");
             
             pthread_mutex_lock(&interruptedMutex);
                 interrupted = true;
@@ -260,7 +267,7 @@ int main(int argc, char**argv)
         if(interrupted == true)
         {
             pthread_mutex_unlock(&interruptedMutex);
-            processRecordsError("exiting from Ctrl+C");
+            fprintf(stderr, "Exiting from Ctrl+C\n");
             break;
         }
         pthread_mutex_unlock(&interruptedMutex);
