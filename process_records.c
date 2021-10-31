@@ -10,6 +10,7 @@
 
 #include "report_record_formats.h"
 #include "queue_ids.h"
+#include "message_utils.h"
 
 // I like C++ better
 #define bool int
@@ -100,84 +101,6 @@ void *statusPrintingThread(void* arg)
 {
     while(interrupted == false) {}
     printStatusReport();
-}
-
-void* getReportRecordBuf()
-{
-    return malloc(sizeof(report_record_buf));
-}
-
-void* getReportRequestBuf()
-{
-    return malloc(sizeof(report_request_buf));
-}
-
-void sendMessage(report_record_buf* record, size_t bufferLength, int queueID)
-{
-    int msqid;
-    int msgflg = IPC_CREAT | 0666;
-    key_t key;
-
-    key = ftok(FILE_IN_HOME_DIR, queueID);
-    if(key == 0xffffffff)
-    {
-        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
-        return;
-    }
-    if((msqid = msgget(key, msgflg)) < 0)
-    {
-        int errnum = errno;
-        fprintf(stderr, "Value of errno: %d\n", errno);
-        perror("(msgget)");
-        fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
-    }
-
-    // Send message
-    if((msgsnd(msqid, record, bufferLength, IPC_NOWAIT)) < 0) {
-        int errnum = errno;
-        fprintf(stderr,"%d, %ld, %s, %d\n", msqid, record->mtype, record->record, (int)bufferLength);
-        perror("(msgsnd)");
-        fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
-        exit(1);
-    }
-}
-
-report_request_buf* getMessage()
-{
-    int msqid;
-    int msgflg = IPC_CREAT | 0666;
-    key_t key;
-    report_request_buf* buf = getReportRequestBuf();
-    size_t buf_length;
-
-    key = ftok(FILE_IN_HOME_DIR,QUEUE_NUMBER);
-    if (key == 0xffffffff) {
-        fprintf(stderr,"Key cannot be 0xffffffff..fix queue_ids.h to link to existing file\n");
-        return NULL;
-    }
-
-    if ((msqid = msgget(key, msgflg)) < 0) {
-        int errnum = errno;
-        fprintf(stderr, "Value of errno: %d\n", errno);
-        perror("(msgget)");
-        fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
-    }
-    else
-        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
-
-    // Recieve message
-    int ret;
-    do {
-        ret = msgrcv(msqid, buf, sizeof(report_request_buf), 1, 0);
-        int errnum = errno;
-        if (ret < 0 && errno !=EINTR){
-            fprintf(stderr, "Value of errno: %d\n", errno);
-            perror("Error printed by perror");
-            fprintf(stderr, "Error receiving msg: %s\n", strerror( errnum ));
-        }
-    } while ((ret < 0 ) && (errno == 4));
-
-    return buf;
 }
 
 int main(int argc, char**argv)
@@ -302,7 +225,7 @@ int main(int argc, char**argv)
                 incResponses(response->report_idx - 1);
 
                 // Send report on correct queue
-                report_record_buf* queryResult = getReportRecordBuf();
+                report_record_buf* queryResult = malloc(sizeof(report_record_buf));
                 queryResult->mtype = 2;
                 strcpy(queryResult->record, currentRecord->record);
 
@@ -321,7 +244,7 @@ int main(int argc, char**argv)
         }
 
         // Send message with no payload to let Java program know to complete
-        report_record_buf* nullBuf = getReportRecordBuf();
+        report_record_buf* nullBuf = malloc(sizeof(report_record_buf));
         nullBuf->mtype = 2;
         strcpy(nullBuf->record, "");
         sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), response->report_idx);

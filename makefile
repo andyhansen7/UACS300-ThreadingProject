@@ -41,7 +41,7 @@ all : edu_cs300_MessageJNI.h process_records $(JAVA_PKG)/ReportingSystem.class $
 edu_cs300_MessageJNI.h: $(JAVA_PKG)/MessageJNI.java
 	javac -h . $(JAVA_PKG)/MessageJNI.java
     
-process_records:process_records.c report_record_formats.h
+process_records:process_records.c report_record_formats.h message_utils.h
 	gcc -std=c99 -pthread -D_GNU_SOURCE $(MAC_FLAG) process_records.c -o process_records
 
 edu_cs300_MessageJNI.o:report_record_formats.h edu_cs300_MessageJNI.h system5_msg.c queue_ids.h
@@ -65,5 +65,5 @@ msgrcv: msgrcv_report_request.c report_record_formats.h queue_ids.h
 
 clean :
 	rm *.o $(SHARED_LIB) edu_cs300_MessageJNI.h $(JAVA_PKG)/*.class process_records msgsnd msgrcv
-	ipcs -q|grep ${USER}|while read line; do id=`echo $$line|cut -d' ' -f3`; echo $$id; ipcrm -Q $$id;done
-
+# 	ipcs -q|grep ${USER}|while read line; do id=`echo $$line|cut -d' ' -f3`; echo $$id; ipcrm -Q $$id;done
+	ipcrm -a
