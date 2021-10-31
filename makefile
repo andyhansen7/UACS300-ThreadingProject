@@ -1,6 +1,7 @@
 # Define a variable for classpath
 CLASS_PATH = .
-JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64/
+# JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64/
+JAVA_HOME=/usr/java/latest
 JAVA_PKG=edu/cs300
 
 
