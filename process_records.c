@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
+#include <unistd.h>
 
 // Headers
 #include "report_record_formats.h"
@@ -43,6 +44,9 @@ pthread_mutex_t numReportsMutex;
 pthread_mutex_t numRecordsMutex;
 pthread_mutex_t interruptedMutex;
 pthread_mutex_t responsesPerQueueMutex;
+
+// Thread
+pthread_t statusThread;
 //endregion
 
 //region ResponsesPerQueue helper functions
@@ -94,6 +98,9 @@ void handleInterrupt(int signal)
         interrupted = true;
     pthread_mutex_unlock(&interruptedMutex);
 
+    // Join status thread and exit
+    pthread_join(statusThread, NULL);
+    exit(0);
 };
 
 void *statusPrintingThread(void* arg)
@@ -169,15 +176,22 @@ int main(int argc, char**argv)
                 }
             }
         pthread_mutex_unlock(&recordListMutex);
-        
+
+        int currentRecordCount = 0;
         pthread_mutex_lock(&numRecordsMutex);
             numRecords++;
+            currentRecordCount = numRecords;
         pthread_mutex_unlock(&numRecordsMutex);
+
+        // Sleep for 5 seconds after 10 records are read
+        if(currentRecordCount == 10)
+        {
+            sleep(5);
+        }
     }
     // endregion
 
     //region Status thread
-    pthread_t statusThread;
     pthread_create(&statusThread, NULL, statusPrintingThread, NULL);
     //endregion
 
@@ -274,6 +288,7 @@ int main(int argc, char**argv)
     }
     // endregion
 
+    // join status thread and exit
     pthread_join(statusThread, NULL);
     exit(0);
 }
