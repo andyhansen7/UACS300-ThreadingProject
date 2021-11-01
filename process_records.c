@@ -97,10 +97,6 @@ void handleInterrupt(int signal)
 {
     pthread_mutex_unlock(&interruptMutex);
     pthread_cond_signal(&interrupt);
-
-    // Join status thread and exit
-    pthread_join(statusThread, NULL);
-    exit(0);
 };
 
 void *statusPrintingThread(void* arg)
