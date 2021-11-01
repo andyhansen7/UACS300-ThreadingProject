@@ -26,6 +26,8 @@ void sendMessage(report_record_buf* record, size_t bufferLength, int queueID)
         perror("(msgget)");
         fprintf(stderr, "Error msgget: %s\n", strerror( errnum ));
     }
+    else
+        fprintf(stderr, "msgget: msgget succeeded: msgqid = %d\n", msqid);
 
     // Send message
     if((msgsnd(msqid, record, bufferLength, IPC_NOWAIT)) < 0) {
@@ -35,6 +37,9 @@ void sendMessage(report_record_buf* record, size_t bufferLength, int queueID)
         fprintf(stderr, "Error sending msg: %s\n", strerror( errnum ));
         exit(1);
     }
+    else
+        fprintf(stderr,"msgsnd-report_record: record\"%s\" Sent (%d bytes)\n", record->record,(int)bufferLength);
+
 }
 
 report_request_buf* getMessage()
@@ -71,6 +76,7 @@ report_request_buf* getMessage()
             fprintf(stderr, "Error receiving msg: %s\n", strerror( errnum ));
         }
     } while ((ret < 0 ) && (errno == 4));
+    fprintf(stderr,"process-msgrcv-request: msg type-%ld, Record %d of %d: %s ret/bytes rcv'd=%d\n", buf->mtype, buf->report_idx, buf->report_count, buf->search_string, ret);
 
     return buf;
 }

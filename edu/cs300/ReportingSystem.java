@@ -20,6 +20,9 @@ public class ReportingSystem
 		Integer reportCounter = 0;
 		ArrayList<ReportGeneratorThread> fileReaders = new ArrayList<ReportGeneratorThread>();
 
+		// Why is this here?
+		DebugLog.log("Load specs and create threads for each report\nStart thread to request, process and print reports");
+
 		try
 		{
 			File file = new File("report_list.txt");
