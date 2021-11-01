@@ -1,6 +1,6 @@
 # Define a variable for classpath
 CLASS_PATH = .
-# JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64/
+#JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64/
 JAVA_HOME=/usr/java/latest
 JAVA_PKG=edu/cs300
 
@@ -37,18 +37,18 @@ CLASSES = \
 
 classes: $(CLASSES:.java=.class)
 
-all : edu_cs300_MessageJNI.h process_records $(JAVA_PKG)/ReportingSystem.class $(SHARED_LIB) classes msgsnd msgrcv
+all: edu_cs300_MessageJNI.h process_records $(JAVA_PKG)/ReportingSystem.class $(SHARED_LIB) classes msgsnd msgrcv
 
 edu_cs300_MessageJNI.h: $(JAVA_PKG)/MessageJNI.java
 	javac -h . $(JAVA_PKG)/MessageJNI.java
     
-process_records:process_records.c report_record_formats.h message_utils.h record_list.h
+process_records: process_records.c report_record_formats.h message_utils.h record_list.h
 	gcc -std=c99 -pthread -lpthread -D_GNU_SOURCE $(MAC_FLAG) process_records.c -o process_records
 
-edu_cs300_MessageJNI.o:report_record_formats.h edu_cs300_MessageJNI.h system5_msg.c queue_ids.h
+edu_cs300_MessageJNI.o: report_record_formats.h edu_cs300_MessageJNI.h system5_msg.c queue_ids.h
 	gcc -c -fPIC -I${JAVA_HOME}/include -I${JAVA_HOME}/include/$(OSFLAG) -D$(OSFLAG) system5_msg.c -o edu_cs300_MessageJNI.o
 
-$(SHARED_LIB):report_record_formats.h edu_cs300_MessageJNI.h edu_cs300_MessageJNI.o
+$(SHARED_LIB): report_record_formats.h edu_cs300_MessageJNI.h edu_cs300_MessageJNI.o
 	gcc $(LINK_FLAGS) -o $(SHARED_LIB) edu_cs300_MessageJNI.o -lc
 
 test: process_records $(JAVA_PKG)/MessageJNI.class $(SHARED_LIB)
@@ -56,6 +56,22 @@ test: process_records $(JAVA_PKG)/MessageJNI.class $(SHARED_LIB)
 	java -cp . -Djava.library.path=. edu/cs300/MessageJNI
 	./msgrcv
 
+install:
+	apt update && apt upgrade
+	apt install default-jre -y
+	apt install openjdk-11-jre-headless -y
+	apt install openjdk-8-jre-headless -y
+	apt install default-jdk -y
+	apt install konsole -y
+	apt update
+
+proc:
+	make clean
+	make
+	./process_records < records.mini
+
+jav:
+	java -cp . -Djava.library.path=. edu.cs300.ReportingSystem
 
 msgsnd: msgsnd_report_record.c report_record_formats.h queue_ids.h
 	gcc -std=c99 -D_GNU_SOURCE -D$(OSFLAG) msgsnd_report_record.c -o msgsnd
@@ -63,8 +79,6 @@ msgsnd: msgsnd_report_record.c report_record_formats.h queue_ids.h
 msgrcv: msgrcv_report_request.c report_record_formats.h queue_ids.h
 	gcc -std=c99 -D_GNU_SOURCE msgrcv_report_request.c -o msgrcv
 
-
-clean :
+clean:
 	rm *.o $(SHARED_LIB) edu_cs300_MessageJNI.h $(JAVA_PKG)/*.class process_records msgsnd msgrcv
-# 	ipcs -q|grep ${USER}|while read line; do id=`echo $$line|cut -d' ' -f3`; echo $$id; ipcrm -Q $$id;done
 	ipcrm -a
