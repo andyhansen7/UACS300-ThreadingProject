@@ -21,7 +21,6 @@
 #include "report_record_formats.h"
 #include "queue_ids.h"
 #include "message_utils.h"
-#include "record_list.h"
 
 // I like C++ better
 #define bool int
@@ -39,7 +38,7 @@ typedef struct requestentry
 // Protected variables
 int numReports = 0;
 int numRecords = 0;
-request_entry* requests;
+request_entry** requests;
 
 // Mutexes
 pthread_mutex_t requestListMutex;
@@ -69,7 +68,7 @@ void printStatusReport()
     pthread_mutex_lock(&requestListMutex);
     for(int i = 0; i < numRep; i++)
     {
-        fprintf(stdout, "Records sent for report index %d: %d\n", i, requests[i].response_count);
+        fprintf(stdout, "Records sent for report index %d: %d\n", i, requests[i]->response_count);
     }
     pthread_mutex_unlock(&requestListMutex);
 };
@@ -118,68 +117,97 @@ int main(int argc, char**argv)
     {
         // Get message from queue
         report_request_buf* response = getMessage();
-        fprintf(stderr, "received response with query: %s\n", response->search_string);
+        fprintf(stderr, "Received response with query: %s, queue: %d\n", response->search_string, response->report_idx);
 
         // Allocate array if not allocated
         if(messagesReceived == 0)
         {
-            numReports = response->report_count;
-            requests = malloc(sizeof(request_entry) * response->report_count);
+            fprintf(stderr, "First request received\n");
+            pthread_mutex_lock(&numReportsMutex);
+                numReports = response->report_count;
+            pthread_mutex_unlock(&numReportsMutex);
+            requests = malloc(sizeof(request_entry*) * response->report_count);
         }
 
         // Create entry
-        request_entry newEntry;
-        newEntry.request = response;
-        newEntry.response_count = 0;
+        request_entry* newEntry = malloc(sizeof(request_entry));
+        newEntry->request = response;
+        newEntry->response_count = 0;
+
+        // Add entry to list
+        pthread_mutex_lock(&requestListMutex);
+            requests[messagesReceived] = newEntry;
+        pthread_mutex_unlock(&requestListMutex);
 
         // Increment responses
         messagesReceived++;
 
         // Break if done
-        if(messagesReceived == response->report_count) break;
+        if(messagesReceived == response->report_count)
+        {
+            fprintf(stderr, "All requests received, sending replies\n");
+            break;
+        }
     }
     // endregion
 
     //region Load and return reports
+    fprintf(stderr, "\n\nLoading records from stdin...\n");
+
+    int numRep = 0;
+    pthread_mutex_lock(&numReportsMutex);
+        numRep = numReports;
+    pthread_mutex_unlock(&numReportsMutex);
+
     while(fgets(line, sizeof line, stdin))
     {
+        // Increment counter
+        pthread_mutex_lock(&numRecordsMutex);
+            numRecords++;
+        pthread_mutex_unlock(&numRecordsMutex);
+
         // Check length is within bounds
         size_t eol = strcspn(line, "\n");
         fprintf(stderr, "system loaded record: %.24s ...\n", line);
         line[eol] = '\0';
         if(eol >= RECORD_FIELD_LENGTH)
         {
-            //processRecordsError("line too long!");
             fprintf(stderr, "read line too long: %s\n", line);
             break;
         }
-        else if(strlen(line) < 2) break;
+        else if(strlen(line) < 2)
+        {
+            fprintf(stderr, "Exiting after completing all requests!\n");
 
-        // Increment counter
-        recordsLoaded++;
+            break;
+        }
 
         // Send line to appropriate threads
-        for(int i = 0; i < numReports; i++)
+        for(int i = 0; i < numRep; i++)
         {
-            request_entry currentRequest = requests[i];
+            request_entry* currentRequest;
+            pthread_mutex_lock(&requestListMutex);
+            currentRequest = requests[i];
+            fprintf(stderr, "current search is: %s\n", currentRequest->request->search_string);
 
-            if(strstr(line, currentRequest.request->search_string) != NULL)
+            if(strstr(line, currentRequest->request->search_string) != NULL)
             {
                 // increment counter for queue
-                currentRequest.response_count++;
+                currentRequest->response_count++;
 
                 // Send report on correct queue
                 report_record_buf* queryResult = malloc(sizeof(report_record_buf));
                 queryResult->mtype = 2;
                 strcpy(queryResult->record, line);
 
-                fprintf(stderr, "Search string: %s\n", currentRequest.request->search_string);
-                fprintf(stderr,"Response: %.24s ...\n", line);
-                fprintf(stderr, "Queue ID: %d\n", currentRequest.request->report_idx);
-                fprintf(stderr, "Total responses to queue: %d\n\n", currentRequest.response_count);
+                fprintf(stderr, "Search string: %s\n", currentRequest->request->search_string);
+                fprintf(stderr, "Response: %.24s ...\n", line);
+                fprintf(stderr, "Queue ID: %d\n", currentRequest->request->report_idx);
+                fprintf(stderr, "Total responses to queue: %d\n\n", currentRequest->response_count);
 
-                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), currentRequest.request->report_idx);
+                sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), currentRequest->request->report_idx);
             }
+            pthread_mutex_unlock(&requestListMutex);    // Fix this later
         }
 
         // Sleep for 5 seconds after 10 records are read
@@ -187,33 +215,30 @@ int main(int argc, char**argv)
         {
             sleep(5);
         }
-
-        pthread_mutex_lock(&numReportsMutex);
-        if(recordsLoaded == numReports)
-        {
-            pthread_mutex_unlock(&numReportsMutex);
-            fprintf(stderr, "Exiting after completing all requests!\n");
-
-            break;
-        }
-        pthread_mutex_unlock(&numReportsMutex);
     }
 
     //endregion
 
     //region Send null terminators to threads
+    fprintf(stderr, "\ndone searching, sending null responses to threads\n");
     report_record_buf* nullBuf = malloc(sizeof(report_record_buf));
     nullBuf->mtype = 2;
     strcpy(nullBuf->record, "");
 
-    for(int i = 0; i < numReports; i++)
+    for(int i = 0; i < numRep; i++)
     {
-        report_request_buf* request = requests[i].request;
-        sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), request->report_idx);
+        pthread_mutex_lock(&requestListMutex);
+            report_request_buf* request = requests[i]->request;
+            sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), request->report_idx);
+        pthread_mutex_unlock(&requestListMutex);
     }
+    fprintf(stderr, "done sending null responses!\n");
     //endregion
 
     // join status thread and exit
+    pthread_mutex_unlock(&interruptMutex);
+    pthread_cond_signal(&interrupt);
+
     pthread_join(statusThread, NULL);
     exit(0);
 }
