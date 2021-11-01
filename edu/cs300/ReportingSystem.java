@@ -7,6 +7,14 @@ import java.util.Scanner;
 import java.util.Vector;
 import java.util.ArrayList;
 
+/** Implementation of ReportingSystem
+ *  Andy Hansen, arhansen@crimson.ua.edu
+ *  Method implements main, opens a list of records from a
+ *  provided filepath, and creates a thread for each. The
+ *  threads are responsible from requesting record data
+ *  on the system V queue and printing it to a report
+ *  from a specified filepath
+ */
 public class ReportingSystem
 {
 	public ReportingSystem()
