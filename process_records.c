@@ -35,18 +35,19 @@ int numReports = 1;
 int numRecords = 0;
 record_list_node* head = NULL;
 record_list_node* tail = NULL;
-bool interrupted = false;
+//bool interrupted = false;
 int* responsesPerQueue;
 
 // Mutexes
 pthread_mutex_t recordListMutex;
 pthread_mutex_t numReportsMutex;
 pthread_mutex_t numRecordsMutex;
-pthread_mutex_t interruptedMutex;
+pthread_mutex_t interruptMutex;
 pthread_mutex_t responsesPerQueueMutex;
 
 // Thread
 pthread_t statusThread;
+pthread_cond_t interrupt;
 //endregion
 
 //region ResponsesPerQueue helper functions
@@ -94,9 +95,8 @@ void printStatusReport()
 
 void handleInterrupt(int signal)
 {
-    pthread_mutex_lock(&interruptedMutex);
-        interrupted = true;
-    pthread_mutex_unlock(&interruptedMutex);
+    pthread_mutex_unlock(&interruptMutex);
+    pthread_cond_signal(&interrupt);
 
     // Join status thread and exit
     pthread_join(statusThread, NULL);
@@ -105,7 +105,9 @@ void handleInterrupt(int signal)
 
 void *statusPrintingThread(void* arg)
 {
-    while(interrupted == false) {}
+    pthread_mutex_lock(&interruptMutex);
+        pthread_cond_wait(&interrupt, &interruptMutex);
+    pthread_mutex_unlock(&interruptMutex);
     printStatusReport();
 }
 
@@ -123,10 +125,11 @@ int main(int argc, char**argv)
     signal(SIGINT, handleInterrupt);
 
     // Initialize mutexes
-    int init_ret0 = pthread_mutex_init(&recordListMutex, NULL);
-    int init_ret1 = pthread_mutex_init(&numReportsMutex, NULL);
-    int init_ret2 = pthread_mutex_init(&numRecordsMutex, NULL);
-    int init_ret3 = pthread_mutex_init(&interruptedMutex, NULL);
+    pthread_mutex_init(&recordListMutex, NULL);
+    pthread_mutex_init(&numReportsMutex, NULL);
+    pthread_mutex_init(&numRecordsMutex, NULL);
+    pthread_mutex_init(&interruptMutex, NULL);
+    pthread_cond_init(&interrupt, NULL);
     //endregion
 
     //region Read from stdin
@@ -267,24 +270,14 @@ int main(int argc, char**argv)
         {
             pthread_mutex_unlock(&numReportsMutex);
             fprintf(stderr, "Exiting after completing all requests!\n");
-            
-            pthread_mutex_lock(&interruptedMutex);
-                interrupted = true;
-            pthread_mutex_unlock(&interruptedMutex);
+
+            // Signal interrupt
+            pthread_mutex_unlock(&interruptMutex);
+            pthread_cond_signal(&interrupt);
 
             break;
         }
         pthread_mutex_unlock(&numReportsMutex);
-
-        // Escape loop if Ctrl+C
-        pthread_mutex_lock(&interruptedMutex);
-        if(interrupted == true)
-        {
-            pthread_mutex_unlock(&interruptedMutex);
-            fprintf(stderr, "Exiting from Ctrl+C\n");
-            break;
-        }
-        pthread_mutex_unlock(&interruptedMutex);
     }
     // endregion
 
