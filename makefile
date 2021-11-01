@@ -51,6 +51,12 @@ edu_cs300_MessageJNI.o: report_record_formats.h edu_cs300_MessageJNI.h system5_m
 $(SHARED_LIB): report_record_formats.h edu_cs300_MessageJNI.h edu_cs300_MessageJNI.o
 	gcc $(LINK_FLAGS) -o $(SHARED_LIB) edu_cs300_MessageJNI.o -lc
 
+msgsnd: msgsnd_report_record.c report_record_formats.h queue_ids.h
+	gcc -std=c99 -D_GNU_SOURCE -D$(OSFLAG) msgsnd_report_record.c -o msgsnd
+
+msgrcv: msgrcv_report_request.c report_record_formats.h queue_ids.h
+	gcc -std=c99 -D_GNU_SOURCE msgrcv_report_request.c -o msgrcv
+
 test: process_records $(JAVA_PKG)/MessageJNI.class $(SHARED_LIB)
 	./msgsnd
 	java -cp . -Djava.library.path=. edu/cs300/MessageJNI
@@ -62,23 +68,20 @@ install:
 	apt install openjdk-11-jre-headless -y
 	apt install openjdk-8-jre-headless -y
 	apt install default-jdk -y
-	apt install konsole -y
 	apt update
 
 proc:
-	make clean
-	make
 	./process_records < records.mini
 
 jav:
 	java -cp . -Djava.library.path=. edu.cs300.ReportingSystem
 
-msgsnd: msgsnd_report_record.c report_record_formats.h queue_ids.h
-	gcc -std=c99 -D_GNU_SOURCE -D$(OSFLAG) msgsnd_report_record.c -o msgsnd
-
-msgrcv: msgrcv_report_request.c report_record_formats.h queue_ids.h
-	gcc -std=c99 -D_GNU_SOURCE msgrcv_report_request.c -o msgrcv
-
 clean:
-	rm *.o $(SHARED_LIB) edu_cs300_MessageJNI.h $(JAVA_PKG)/*.class process_records msgsnd msgrcv
+	rm *.o $(SHARED_LIB)
+	rm edu_cs300_MessageJNI.h
+	rm $(JAVA_PKG)/*.class
+	rm process_records
+	rm msgsnd
+	rm msgrcv
+	rm *.rpt
 	ipcrm -a
