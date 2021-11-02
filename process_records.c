@@ -28,11 +28,13 @@
 #define false 0
 #define SIGINT  2
 
+//region Helper Struct
 typedef struct requestentry
 {
     report_request_buf* request;
     int response_count;
 } request_entry;
+//endregion
 
 //region Global Variables
 // Protected variables
