@@ -41,16 +41,36 @@ typedef struct requestentry
 int numReports = 0;
 int numRecords = 0;
 request_entry** requests;
+bool done = false;
 
 // Mutexes
 pthread_mutex_t requestListMutex;
 pthread_mutex_t numReportsMutex;
 pthread_mutex_t numRecordsMutex;
 pthread_mutex_t interruptMutex;
+pthread_mutex_t doneMutex;
 
 // Printing thread
 pthread_t statusThread;
 pthread_cond_t interrupt;
+//endregion
+
+//region Done Helpers
+bool isDone()
+{
+    bool ret;
+    pthread_mutex_lock(&doneMutex);
+        ret = done;
+    pthread_mutex_unlock(&doneMutex);
+    return ret;
+}
+
+void setDone()
+{
+    pthread_mutex_lock(&doneMutex);
+        done = true;
+    pthread_mutex_unlock(&doneMutex);
+}
 //endregion
 
 void printStatusReport()
@@ -64,7 +84,7 @@ void printStatusReport()
         numRep = numReports;
     pthread_mutex_unlock(&numReportsMutex);
 
-    fprintf(stdout, "***REPORT***\n");
+    fprintf(stdout, "\n***REPORT***\n");
     fprintf(stdout, "%d records read for %d reports\n", numRec, numRep);
 
     pthread_mutex_lock(&requestListMutex);
@@ -83,10 +103,13 @@ void handleInterrupt(int signal)
 
 void *statusPrintingThread(void* arg)
 {
-    pthread_mutex_lock(&interruptMutex);
-        pthread_cond_wait(&interrupt, &interruptMutex);
-    pthread_mutex_unlock(&interruptMutex);
-    printStatusReport();
+    while(isDone() == false)
+    {
+        pthread_mutex_lock(&interruptMutex);
+            pthread_cond_wait(&interrupt, &interruptMutex);
+        pthread_mutex_unlock(&interruptMutex);
+        printStatusReport();
+    }
 }
 
 int main(int argc, char**argv)
@@ -111,6 +134,7 @@ int main(int argc, char**argv)
     pthread_mutex_init(&numReportsMutex, NULL);
     pthread_mutex_init(&numRecordsMutex, NULL);
     pthread_mutex_init(&interruptMutex, NULL);
+    pthread_mutex_init(&doneMutex, NULL);
     pthread_cond_init(&interrupt, NULL);
     //endregion
 
@@ -184,6 +208,8 @@ int main(int argc, char**argv)
             break;
         }
 
+        recordsLoaded++;
+
         // Send line to appropriate threads
         for(int i = 0; i < numRep; i++)
         {
@@ -215,7 +241,12 @@ int main(int argc, char**argv)
         // Sleep for 5 seconds after 10 records are read
         if(recordsLoaded == 10)
         {
-            sleep(5);
+            fprintf(stderr, "Starting sleep");
+            //sleep(5);
+            time_t start, end;
+            time(&start);
+            do time(&end); while(difftime(end, start) <= 5.0);
+            fprintf(stderr, "Ending sleep");
         }
     }
 
@@ -238,6 +269,7 @@ int main(int argc, char**argv)
     //endregion
 
     // join status thread and exit
+    setDone();
     pthread_mutex_unlock(&interruptMutex);
     pthread_cond_signal(&interrupt);
 
