@@ -143,12 +143,12 @@ int main(int argc, char**argv)
     {
         // Get message from queue
         report_request_buf* response = getMessage();
-        fprintf(stderr, "Received response with query: %s, queue: %d\n", response->search_string, response->report_idx);
+        //fprintf(stderr, "Received response with query: %s, queue: %d\n", response->search_string, response->report_idx);
 
         // Allocate array if not allocated
         if(messagesReceived == 0)
         {
-            fprintf(stderr, "First request received\n");
+            //fprintf(stderr, "First request received\n");
             pthread_mutex_lock(&numReportsMutex);
                 numReports = response->report_count;
             pthread_mutex_unlock(&numReportsMutex);
@@ -171,14 +171,14 @@ int main(int argc, char**argv)
         // Break if done
         if(messagesReceived == response->report_count)
         {
-            fprintf(stderr, "All requests received, sending replies\n");
+            //fprintf(stderr, "All requests received, sending replies\n");
             break;
         }
     }
     // endregion
 
     //region Load and return reports
-    fprintf(stderr, "\n\nLoading records from stdin...\n");
+    //fprintf(stderr, "\n\nLoading records from stdin...\n");
 
     int numRep = 0;
     pthread_mutex_lock(&numReportsMutex);
@@ -194,16 +194,16 @@ int main(int argc, char**argv)
 
         // Check length is within bounds
         size_t eol = strcspn(line, "\n");
-        fprintf(stderr, "system loaded record: %.24s ...\n", line);
+        //fprintf(stderr, "system loaded record: %.24s ...\n", line);
         line[eol] = '\0';
         if(eol >= RECORD_FIELD_LENGTH)
         {
-            fprintf(stderr, "read line too long: %s\n", line);
+            //fprintf(stderr, "read line too long: %s\n", line);
             break;
         }
         else if(strlen(line) < 2)
         {
-            fprintf(stderr, "Exiting after completing all requests!\n");
+            //fprintf(stderr, "Exiting after completing all requests!\n");
 
             break;
         }
@@ -216,7 +216,7 @@ int main(int argc, char**argv)
             request_entry* currentRequest;
             pthread_mutex_lock(&requestListMutex);
             currentRequest = requests[i];
-            fprintf(stderr, "current search is: %s\n", currentRequest->request->search_string);
+            //fprintf(stderr, "current search is: %s\n", currentRequest->request->search_string);
 
             if(strstr(line, currentRequest->request->search_string) != NULL)
             {
@@ -228,10 +228,10 @@ int main(int argc, char**argv)
                 queryResult->mtype = 2;
                 strcpy(queryResult->record, line);
 
-                fprintf(stderr, "Search string: %s\n", currentRequest->request->search_string);
-                fprintf(stderr, "Response: %.24s ...\n", line);
-                fprintf(stderr, "Queue ID: %d\n", currentRequest->request->report_idx);
-                fprintf(stderr, "Total responses to queue: %d\n\n", currentRequest->response_count);
+                //fprintf(stderr, "Search string: %s\n", currentRequest->request->search_string);
+                //fprintf(stderr, "Response: %.24s ...\n", line);
+                //fprintf(stderr, "Queue ID: %d\n", currentRequest->request->report_idx);
+                //fprintf(stderr, "Total responses to queue: %d\n\n", currentRequest->response_count);
 
                 sendMessage(queryResult, (strlen(queryResult->record) + sizeof(int) + 1), currentRequest->request->report_idx);
             }
@@ -241,19 +241,19 @@ int main(int argc, char**argv)
         // Sleep for 5 seconds after 10 records are read
         if(recordsLoaded == 10)
         {
-            fprintf(stderr, "Starting sleep");
+            //fprintf(stderr, "Starting sleep");
             //sleep(5);
             time_t start, end;
             time(&start);
             do time(&end); while(difftime(end, start) <= 5.0);
-            fprintf(stderr, "Ending sleep");
+            //fprintf(stderr, "Ending sleep");
         }
     }
 
     //endregion
 
     //region Send null terminators to threads
-    fprintf(stderr, "\ndone searching, sending null responses to threads\n");
+    //fprintf(stderr, "\ndone searching, sending null responses to threads\n");
     report_record_buf* nullBuf = malloc(sizeof(report_record_buf));
     nullBuf->mtype = 2;
     strcpy(nullBuf->record, "");
@@ -265,7 +265,7 @@ int main(int argc, char**argv)
             sendMessage(nullBuf, (strlen(nullBuf->record) + sizeof(int) + 1), request->report_idx);
         pthread_mutex_unlock(&requestListMutex);
     }
-    fprintf(stderr, "done sending null responses!\n");
+    //fprintf(stderr, "done sending null responses!\n");
     //endregion
 
     // join status thread and exit
