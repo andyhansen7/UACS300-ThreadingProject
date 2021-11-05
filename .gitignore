@@ -3,4 +3,5 @@ msgrcv
 msgsnd
 process_records
 *.o
+*.so
 *.rpt
